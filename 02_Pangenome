@@ -1,5 +1,7 @@
 #!/bin/bash
 
+#Is necessary to reformating fasta files before start. See script "01_reformat_fata"
+
 # Activate Anvio environment
 conda activate anvio-8
 
