@@ -1,0 +1,3 @@
+This repository contains resources and data associated with the study of Richelia intracellularis and its evolutionary and metabolic adaptations to an obligate symbiotic lifestyle with diatoms.
+The study highlights the genomic, phylogenomic, and metabolic features of R. intracellularis, offering new perspectives on host-symbiont interactions and nitrogen fixation in marine ecosystems.
+The scripts here include the codes for pangenomic analysis on Anvio-8, extraction of sequences of interest, creation of fasta files for MSA analysis, generating phylogenetic tree baes on MSA and study of evolution of genes relate do nitrogen fixation.
