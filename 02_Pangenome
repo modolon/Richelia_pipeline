@@ -1,0 +1,97 @@
+#!/bin/bash
+
+# Activate Anvio environment
+conda activate anvio-8
+
+# Step 2: Generate genome names list
+echo "### Step 2: Generating genome names ###"
+ls *.fasta | awk 'BEGIN{FS="-"}{print $1}' > genomes.txt
+
+# Step 3: Filter FASTA files by sequence length
+echo "### Step 3: Filtering FASTA files ###"
+while read -r g; do
+    echo "Processing genome: $g"
+    anvi-script-reformat-fasta "$g" \
+        --min-len 2000 \
+        --simplify-names \
+        -o "${g}_trimm.fasta"
+done < genomes.txt
+
+# Step 4: Generate contigs databases
+echo "### Step 4: Generating contigs databases ###"
+while read -r g; do
+    echo "Creating contigs database for: $g"
+    anvi-gen-contigs-database \
+        -f "${g}_trimm.fasta" \
+        -o "Isolate_${g}.db" \
+        --num-threads 44 \
+        -n "Isolate_${g}"
+done < genomes.txt
+
+# Step 5: Annotate contigs databases
+echo "### Step 5: Annotating contigs databases ###"
+for db in *.db; do
+    echo "Annotating database: $db"
+    anvi-run-hmms -c "$db" --num-threads 50
+    anvi-run-ncbi-cogs -c "$db" --num-threads 50
+    anvi-scan-trnas -c "$db" --num-threads 50
+    anvi-run-scg-taxonomy -c "$db" --num-threads 50
+    anvi-run-kegg-kofams -c "$db" --num-threads 50
+done
+
+# Step 6: Display contigs stats
+echo "### Step 6: Displaying contigs statistics ###"
+anvi-display-contigs-stats *.db
+
+# Step 7: Create external genomes file
+echo "### Step 7: Creating external genomes file ###"
+anvi-script-gen-genomes-file --input-dir . -o external-genomes.txt
+
+# Step 8: Estimate genome contamination
+echo "### Step 8: Estimating contamination ###"
+anvi-estimate-genome-completeness -e external-genomes.txt
+
+# Step 9: Compute the pangenome
+echo "### Step 9: Computing the pangenome ###"
+anvi-gen-genomes-storage -e external-genomes.txt -o GENOMES.db --force-overwrite
+anvi-pan-genome -g GENOMES.db \
+    --project-name Rivu_pan \
+    --mcl-inflation 2 \
+    --force-overwrite \
+    --min-occurrence 2 \
+    -T 44
+
+# Step 10: Compute ANIb
+echo "### Step 10: Computing ANIb ###"
+anvi-compute-genome-similarity \
+    -e external-genomes.txt \
+    -o ani.txt \
+    -T 50 \
+    --pan-db Rivu_pan/Rivu_pan-PAN.db \
+    --program pyANI \
+    --force-overwrite
+
+# Step 11: Phylogenomics
+echo "### Step 11: Phylogenomics ###"
+anvi-get-sequences-for-gene-clusters \
+    -p Rivu_pan/Rivu_pan-PAN.db \
+    -g GENOMES.db \
+    --min-num-genomes-gene-cluster-occurs 16 \
+    --max-num-genes-from-each-genome 1 \
+    --concatenate-gene-clusters \
+    --output-file Rivu_pan/Rivu-SCGs.fa
+
+# Clean sequences with trimAl
+trimal -in Rivu_pan/Rivu-SCGs.fa -out Rivu_pan/Rivu-SCGs-clean.fa -gt 0.50
+
+# Infer phylogeny with RAxML-NG
+raxml-ng --all --msa Rivu_pan/Rivu-SCGs-clean.fa \
+    --model LG+G8+F --tree pars{10} --bs-trees 1000
+
+# Step 12: Visualization with metadata
+echo "### Step 12: Visualization ###"
+anvi-import-misc-data metadata.txt -p Rivu_pan/Rivu_pan-PAN.db --target-data-table layers
+anvi-import-misc-data tree.txt -p Rivu_pan/Rivu_pan-PAN.db --target-data-table layer_orders
+anvi-display-pan -p Rivu_pan/Rivu_pan-PAN.db -g GENOMES.db -d metadata.txt
+
+echo "Pipeline completed successfully!"
